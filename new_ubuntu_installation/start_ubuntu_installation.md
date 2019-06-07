@@ -85,3 +85,25 @@ cat ~/.ssh/id_rsa.pub | xclip -sel clip
 sudo apt-get install xclip -y
 cat file_path_here | xclip -sel clip
 ```
+
+
+..venv_wrapper
+```
+sudo apt install python3.7-minimal
+wget https://bootstrap.pypa.io/get-pip.py
+sudo python3.7 get-pip.py
+pip -V
+sudo pip install virtualenv virtualenvwrapper
+mkdir ~/venvs
+nano ~/.bashrc
+---
+## Virtualenv
+
+# export WORKON_HOME=$HOME/.venvs
+# export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
+# source /usr/local/bin/virtualenvwrapper.sh
+---
+source ~/.bashrc
+mkvirtualenv bfo
+workon bfo
+```
