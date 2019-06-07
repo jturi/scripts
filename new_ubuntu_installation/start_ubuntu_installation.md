@@ -2,7 +2,14 @@
 ```
 sudo apt-get update && sudo apt-get upgrade -y
 ```
-..install apt packages
+
+..install_first_packages
+```
+sudo apt-get install -y tmux htop git sshfs xclip xdotool unrar unzip trash-cli \
+mc make python-pip python3-pip python3.7-minimal supervisor openssh-server 
+```
+
+..install apt packages bulk
 ```
 python /home/jturi/repos/notes/scripts/ubuntu_new_install/apt_install.py
 ```
