@@ -6,7 +6,7 @@ sudo apt-get update && sudo apt-get upgrade -y
 ..install_first_packages
 ```
 sudo apt-get install -y tmux htop git sshfs xclip xdotool unrar unzip trash-cli \
-mc make python-pip python3-pip python3.7-minimal supervisor openssh-server 
+mc make python-pip python3-pip python3.7-minimal supervisor
 ```
 
 ..install apt packages bulk
@@ -52,7 +52,7 @@ Set Font sizes to 14
 
 ..ssh-keys, change keys
 ```
-https://bitbucket.org/account/user/your_username/ssh-keys/
+https://bitbucket.org/account/user/jturi/ssh-keys/
 ### generate ssh key
 ssh-keygen -b 4096
 ### copy ssh key to clipboard

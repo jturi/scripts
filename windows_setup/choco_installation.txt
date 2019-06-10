@@ -1,0 +1,29 @@
+
+Install Chocolatey:
+
+______________
+
+Install with command line
+
+@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
+
+
+use xml file with name w_packages.config
+
+
+execute xml file and start installations:
+
+choco
+
+choco install w_packages.config -y
+
+
+
+to refresh virtual env variables use:
+
+refreshenv
+
+
+List local packages:
+
+ choco list --local-only
