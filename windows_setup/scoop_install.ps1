@@ -21,7 +21,7 @@ finally {
         # Add bucket for more packages
         scoop bucket add extras
         # Install packages
-        scoop install 7zip atom autohotkey cmder curl ditto git greenshot irfanview lessmsi logstash make meld openhardwaremonitor opera putty pycharm python screentogif totalcommander vlc winscp
+        scoop install 7zip Audacity autohotkey brave calibre conemu copyq discord ditto firefox cmder foxit-reader curl git googlechrome greenshot obs-studio irfanview   make meld openhardwaremonitor putty python qbittorrent screentogif totalcommander vlc vscode winscp
         # List installed packages
         scoop list
         }
