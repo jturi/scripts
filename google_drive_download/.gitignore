@@ -1,0 +1,13 @@
+# Virtual environment
+.venv/
+
+# OAuth secrets / tokens — never commit
+credentials.json
+token.json
+
+# Download output
+drive_download/
+
+# Python caches
+__pycache__/
+*.py[cod]

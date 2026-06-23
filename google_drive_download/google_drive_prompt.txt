@@ -1,0 +1,152 @@
+# Task: Implement `download_drive_data.py`
+
+You are an expert Python engineer. Write a single, production-quality, self-contained
+Python 3.10+ script named `download_drive_data.py` that mirrors my Google Drive to a local
+directory. Return only the complete script plus a short "How to run" note. Do not stub or
+omit logic with `...` or "TODO". Code must run as written.
+
+## Objective
+Create a local mirror of my Google Drive. Authenticate with an existing OAuth token,
+download the **largest files first**, run downloads **in parallel across threads**, and be
+**idempotent** — re-running (including after a crash or Ctrl+C) must download only files
+that are missing or changed, never corrupting or duplicating existing data.
+
+## Non-negotiable requirements (acceptance criteria)
+The reviewer will check each of these explicitly. Satisfy all of them:
+1. Uses the official Google API client stack: `google-api-python-client`, `google-auth`,
+   `google-auth-oauthlib`, `google-auth-httplib2`.
+2. Loads OAuth credentials from a token file; refreshes and re-persists the token when
+   expired; falls back to the installed-app consent flow using a client-secrets file when
+   no valid token exists. Read-only scope: `https://www.googleapis.com/auth/drive.readonly`.
+3. Enumerates every non-trashed file (paginated, no item count cap) and rebuilds the full
+   folder hierarchy locally.
+4. Orders binary files by size descending so the biggest start first.
+5. Downloads concurrently with a configurable thread pool.
+6. Is idempotent and resumable: verified-complete files are skipped on re-run; partial
+   downloads are never mistaken for complete files.
+7. Never aborts the whole run on a single file error; reports a failure summary at the end.
+8. Has a working CLI with the flags listed below, including `--dry-run`.
+
+## Authentication (detail)
+- Default token path `token.json`, default client-secrets path `credentials.json` (both
+  overridable via CLI).
+- If the token is missing/invalid and a refresh token exists, refresh and write it back.
+- If no usable token, run `InstalledAppFlow` and save the resulting token.
+- Build the service with `googleapiclient.discovery.build("drive", "v3", ...)`.
+
+## Enumeration (detail)
+- Use `files().list` with pagination over `nextPageToken`.
+- `q="trashed = false"`. Set `fields` to fetch:
+  `nextPageToken, files(id, name, size, mimeType, md5Checksum, modifiedTime, parents,
+  exportLinks)`.
+- Support both My Drive and Shared Drives: pass
+  `supportsAllDrives=True, includeItemsFromAllDrives=True`, and make Shared Drives optional
+  via a `--include-shared-drives` flag.
+- Rebuild paths from `parents`: fetch all folders, build an id→(name, parent) map, and
+  resolve each file's full relative path. Handle:
+  - files with no parent (place at root),
+  - files with multiple parents (Drive allows it — pick one deterministically, or place a
+    copy under each; document the choice),
+  - orphaned/missing parents (fall back to a `_orphaned/` directory).
+
+## Google-native files (Docs/Sheets/Slides/Drawings)
+- These have no `size` and cannot be downloaded directly; export via `files().export_media`.
+- Provide a MIME export map, e.g.:
+  - Doc  → `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (.docx)
+  - Sheet→ `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (.xlsx)
+  - Slides→`application/vnd.openxmlformats-officedocument.presentationml.presentation`(.pptx)
+  - Drawing → `image/png` (.png)
+- Toggle with `--export-google-docs / --no-export-google-docs` (default on). Skip unknown
+  native types (e.g. Forms) with a logged warning. Note: export is capped by Google at
+  ~10 MB; handle the resulting error gracefully.
+
+## Concurrency (detail)
+- Use `concurrent.futures.ThreadPoolExecutor`, worker count from `--workers` (default 4).
+- The `googleapiclient` service/`http` object is NOT thread-safe to share. Build a separate
+  service per thread (e.g. via `threading.local()` or one service constructed inside each
+  worker), or otherwise document and enforce safe sharing.
+- Stream downloads with `MediaIoBaseDownload` in chunks (configurable chunk size); never
+  load whole files into memory.
+
+## Idempotency & resume contract
+- "Up to date" check before downloading:
+  1. If Drive `md5Checksum` is present, compare it to the md5 of the existing local file →
+     skip if equal.
+  2. Otherwise (e.g. exported Google files), compare local size and `modifiedTime`; skip
+     only if both match the recorded state.
+- Write to a temporary sibling file (`<name>.part` or a tempfile in the same directory),
+  `fsync`, then atomically `os.replace` into the final path on success. A `.part` left by a
+  prior crash must be ignored/overwritten, never treated as complete.
+- Re-running after a full successful run should download zero files.
+
+## Robustness
+- Retry transient errors — HTTP 403 rate-limit, 429, 5xx, socket/SSL/connection errors —
+  with exponential backoff + jitter and a max-retry cap. Do NOT retry 404/permission errors.
+- Sanitize names for the local filesystem (strip/replace `/`, NUL, reserved chars; trim
+  trailing dots/spaces) and de-duplicate colliding names within the same folder.
+- Create directories as needed; tolerate concurrent directory creation.
+- Handle Ctrl+C cleanly: stop scheduling new work, let in-flight downloads finish or cancel,
+  leave completed files intact, and exit with a clear message and non-zero status.
+
+## CLI (argparse)
+- `--output-dir`, `-o` (default `./drive_download`)
+- `--token` (default `token.json`)
+- `--credentials` (default `credentials.json`)
+- `--workers` (int, default 4)
+- `--include-shared-drives` (flag, default off)
+- `--export-google-docs` / `--no-export-google-docs` (default on)
+- `--chunk-size` (MB, default e.g. 16)
+- `--max-retries` (int, default 5)
+- `--dry-run` (list planned downloads with sizes, in download order; write nothing)
+- `--no-progress` (disable the live progress bar; useful for non-TTY/log output)
+- `--verbose` / `-v`
+
+## Logging & summary
+- Use the `logging` module with timestamps; `--verbose` enables DEBUG.
+- Thread-safe per-file lines: STARTED / SKIPPED (reason) / DONE (bytes) / FAILED (error).
+- Final summary: total files seen, downloaded, skipped, failed (with names), and total bytes
+  transferred. Exit non-zero if any file failed.
+
+## Live progress bar & ETA (dynamic)
+Show a continuously updating progress display while downloads run:
+- Render an overall progress bar driven by **bytes**, not file count, since file sizes vary
+  wildly: `downloaded_bytes / total_bytes_to_download`. Compute `total_bytes_to_download`
+  from the planned set (sum of binary file sizes; Google-native exports have unknown size —
+  exclude them from the byte total but still count them toward files-completed, and label
+  the bar as approximate when any are present).
+- Update the bar incrementally as each `MediaIoBaseDownload` chunk completes, so progress
+  moves smoothly within large files — not only when a whole file finishes.
+- All worker threads report chunk progress into a single shared, lock-protected counter; the
+  bar is rendered from that aggregate (one renderer, e.g. a background thread or the main
+  thread refreshing ~4x/sec). Do not let each thread print its own bar.
+- Display, on the live line: percent complete, a textual bar, downloaded/total (human-
+  readable, e.g. `12.3 GB / 80.1 GB`), **current aggregate speed**, **ETA**, and
+  files done/total (e.g. `[ 34/512 files ]`).
+
+### Speed & ETA must be computed dynamically on the fly
+- Compute **current** throughput from a rolling/sliding window of recent bytes (e.g. bytes
+  transferred over the last ~3–5 seconds, or an exponential moving average), NOT a naive
+  total_bytes / total_elapsed average. The displayed speed must react in real time as the
+  network speeds up or slows down.
+- Recompute ETA every refresh from `remaining_bytes / current_smoothed_speed`. ETA must
+  fall when the connection is fast and rise when it slows — never a fixed estimate.
+- Guard against division by zero and show `ETA --:--` until enough samples exist; format ETA
+  as `HH:MM:SS` (or `MM:SS`).
+- Speeds reflect the combined throughput of all worker threads.
+
+### Implementation notes
+- Prefer `tqdm` for the rendering if available (use a single shared bar updated via
+  `bar.update(n_bytes)` from a lock, and read its smoothed rate for the speed display), but
+  the script must degrade gracefully to a plain stderr line if `tqdm` is not installed.
+- Render to `stderr` so progress doesn't pollute piped stdout; use carriage-return in-place
+  updates on a TTY.
+- Auto-disable the live bar when stdout/stderr is not a TTY or when `--no-progress` is set,
+  falling back to periodic textual progress log lines.
+- On completion or Ctrl+C, finalize/clear the bar cleanly before printing the summary so the
+  terminal isn't left in a broken state.
+
+## Code quality
+- Type hints, docstrings, small focused functions, `if __name__ == "__main__":` guard.
+- A top-of-file docstring listing the exact `pip install` command for all dependencies and a
+  one-line usage example.
+- No global mutable state shared across threads without a lock; counters must be thread-safe.
