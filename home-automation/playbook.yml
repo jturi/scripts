@@ -1,0 +1,114 @@
+---
+- name: Home Assistant Stack
+  hosts: homeassistant
+  vars:
+    stack_dir: "{{ playbook_dir }}"
+    compose_file: "{{ stack_dir }}/compose.yaml"
+
+  tasks:
+    # --- Install ---
+    - name: Check Docker is available
+      ansible.builtin.command: docker info
+      changed_when: false
+      tags: [install]
+
+    - name: Check ZBT-1 Zigbee stick is present
+      ansible.builtin.stat:
+        path: /dev/ttyUSB0
+      register: zigbee_stick
+      tags: [install]
+
+    - name: Warn if ZBT-1 not detected
+      ansible.builtin.debug:
+        msg: "WARNING: /dev/ttyUSB0 not found — Zigbee2MQTT will fail to start. Plug in the ZBT-1 and re-run."
+      when: not zigbee_stick.stat.exists
+      tags: [install]
+
+    - name: Create config directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ stack_dir }}/config/homeassistant"
+        - "{{ stack_dir }}/config/mosquitto"
+        - "{{ stack_dir }}/config/zigbee2mqtt"
+      tags: [install]
+
+    - name: Pull container images
+      ansible.builtin.command:
+        cmd: docker compose -f {{ compose_file }} pull
+      changed_when: true
+      tags: [install, update]
+
+    - name: Start the stack
+      ansible.builtin.command:
+        cmd: docker compose -f {{ compose_file }} up -d
+      changed_when: true
+      tags: [install, start, restart, update]
+
+    - name: Wait for Home Assistant to be ready
+      ansible.builtin.uri:
+        url: http://localhost:8123
+        method: GET
+        status_code: [200, 401]
+      register: ha_health
+      retries: 30
+      delay: 5
+      until: ha_health is not failed
+      tags: [install]
+
+    - name: Installation complete
+      ansible.builtin.debug:
+        msg: |
+          Home Assistant is running.
+            Home Assistant:  http://{{ ansible_default_ipv4.address | default('localhost') }}:8123
+            Zigbee2MQTT:     http://{{ ansible_default_ipv4.address | default('localhost') }}:8085
+            Node-RED:        http://{{ ansible_default_ipv4.address | default('localhost') }}:1880
+            MQTT Broker:     {{ ansible_default_ipv4.address | default('localhost') }}:1883
+      tags: [install]
+
+    # --- Stop ---
+    - name: Stop the stack
+      ansible.builtin.command:
+        cmd: docker compose -f {{ compose_file }} stop
+      changed_when: true
+      tags: [stop, never]
+
+    # --- Restart ---
+    - name: Restart the stack
+      ansible.builtin.command:
+        cmd: docker compose -f {{ compose_file }} restart
+      changed_when: true
+      tags: [restart, never]
+
+    # --- Update ---
+    - name: Update complete
+      ansible.builtin.debug:
+        msg: "All containers pulled and restarted with latest images."
+      tags: [update, never]
+
+    # --- Status ---
+    - name: Show container status
+      ansible.builtin.command:
+        cmd: docker compose -f {{ compose_file }} ps
+      register: compose_status
+      changed_when: false
+      tags: [status, never]
+
+    - name: Print status
+      ansible.builtin.debug:
+        msg: "{{ compose_status.stdout }}"
+      tags: [status, never]
+
+    # --- Uninstall ---
+    - name: Stop and remove containers
+      ansible.builtin.command:
+        cmd: docker compose -f {{ compose_file }} down -v
+      changed_when: true
+      tags: [uninstall, never]
+
+    - name: Uninstall complete
+      ansible.builtin.debug:
+        msg: "All containers and volumes removed. Config files in {{ stack_dir }}/config/ are preserved."
+      tags: [uninstall, never]

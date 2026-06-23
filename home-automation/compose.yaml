@@ -1,0 +1,61 @@
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:stable
+    volumes:
+      - ./config/homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    environment:
+      TZ: Europe/Budapest
+    depends_on:
+      mosquitto:
+        condition: service_started
+
+  mosquitto:
+    container_name: mosquitto
+    image: eclipse-mosquitto
+    volumes:
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    ports:
+      - "1883:1883"
+    restart: unless-stopped
+
+  nodered:
+    container_name: nodered
+    image: nodered/node-red
+    volumes:
+      - nodered_data:/data
+    ports:
+      - "1880:1880"
+    restart: unless-stopped
+    depends_on:
+      homeassistant:
+        condition: service_started
+
+  zigbee2mqtt:
+    container_name: zigbee2mqtt
+    image: koenkk/zigbee2mqtt
+    volumes:
+      - ./config/zigbee2mqtt:/app/data
+      - /run/udev:/run/udev:ro
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Budapest
+    depends_on:
+      mosquitto:
+        condition: service_started
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  nodered_data:
