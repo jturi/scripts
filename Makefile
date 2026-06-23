@@ -48,7 +48,7 @@ skaffold:
 	[[ -z $$FOUNDATION_NO_WAIT ]] && read -rs -t15 -n 1 yn;
 	exec 0<&9 9<&-
 	[[ -z $$yn ]] || [[ $$yn == [yY] ]] && echo Y >&2 || (echo N >&2 && exit 1)
-  @#if make .prompt-yesno message="Do you want to continue y/n?" 2> /dev/null; then \
+# usage: if make .prompt-yesno message="Do you want to continue y/n?" 2> /dev/null; then ...
 
 prepare-dev:  ## create virtual environment (local development)
 	sudo add-apt-repository ppa:deadsnakes/ppa -y
@@ -77,3 +77,9 @@ freeze:	venv
 
 cleanpyc:
 	find . | grep -E "(__pycache__|\.pyc)" | xargs rm -rf
+
+.PHONY: storage
+storage: ## Show free space on each drive in GB
+	@df -B1G --output=source,target,avail -x tmpfs -x devtmpfs -x squashfs -x overlay 2>/dev/null \
+		| awk 'NR==1 {printf "%-20s %-25s %s\n", "DRIVE", "MOUNT", "FREE(GB)"; next} \
+			/^\/dev/ && !seen[$$1]++ {printf "$(GREEN)%-20s$(RESET) %-25s $(YELLOW)%s$(RESET)\n", $$1, $$2, $$3}'
