@@ -35,6 +35,13 @@ run: venv ## Pick a target drive, then download your Drive there
 		echo "Downloading to $$dest" && \
 		$(PYTHON) download_drive_data.py -o "$$dest" --workers $(WORKERS)
 
+.PHONY: photos
+photos: venv ## Pick a target drive, then download your Google Photos there
+	@mount=$$(SPEED_MB=$(SPEED_MB) ./drives.sh pick) && \
+		dest="$$mount/photos_download" && \
+		echo "Downloading to $$dest" && \
+		$(PYTHON) download_photos_data.py -o "$$dest" --workers $(WORKERS)
+
 .PHONY: clean
 clean: ## Remove the venv and Python caches
 	rm -rf $(VENV) __pycache__ tests/__pycache__
