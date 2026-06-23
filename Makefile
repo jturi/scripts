@@ -77,9 +77,3 @@ freeze:	venv
 
 cleanpyc:
 	find . | grep -E "(__pycache__|\.pyc)" | xargs rm -rf
-
-.PHONY: storage
-storage: ## Show free space on each drive in GB
-	@df -B1G --output=source,target,avail -x tmpfs -x devtmpfs -x squashfs -x overlay 2>/dev/null \
-		| awk 'NR==1 {printf "%-20s %-25s %s\n", "DRIVE", "MOUNT", "FREE(GB)"; next} \
-			/^\/dev/ && !seen[$$1]++ {printf "$(GREEN)%-20s$(RESET) %-25s $(YELLOW)%s$(RESET)\n", $$1, $$2, $$3}'

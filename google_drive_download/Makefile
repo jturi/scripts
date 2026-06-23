@@ -1,8 +1,9 @@
-VENV    := .venv
-PYTHON  := $(VENV)/bin/python
-PIP     := $(VENV)/bin/pip
-OUT     ?= ./drive_download
-WORKERS ?= 8
+VENV     := .venv
+PYTHON   := $(VENV)/bin/python
+PIP      := $(VENV)/bin/pip
+OUT      ?= ./drive_download
+WORKERS  ?= 8
+SPEED_MB ?= 256
 
 .DEFAULT_GOAL := help
 
@@ -28,9 +29,16 @@ dry-run: venv ## Real --dry-run against your Drive (needs credentials.json/token
 	$(PYTHON) download_drive_data.py --dry-run -o $(OUT)
 
 .PHONY: run
-run: venv ## Download your Drive (needs credentials.json/token.json)
-	$(PYTHON) download_drive_data.py -o $(OUT) --workers $(WORKERS)
+run: venv ## Pick a target drive, then download your Drive there
+	@mount=$$(SPEED_MB=$(SPEED_MB) ./drives.sh pick) && \
+		dest="$$mount/drive_download" && \
+		echo "Downloading to $$dest" && \
+		$(PYTHON) download_drive_data.py -o "$$dest" --workers $(WORKERS)
 
 .PHONY: clean
 clean: ## Remove the venv and Python caches
 	rm -rf $(VENV) __pycache__ tests/__pycache__
+
+.PHONY: storage
+storage: ## Show free space and write speed per drive (writes a temp file; SPEED_MB=256)
+	@SPEED_MB=$(SPEED_MB) ./drives.sh list
