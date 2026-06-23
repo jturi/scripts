@@ -135,7 +135,11 @@ def get_credentials(token_path: Path, creds_path: Path) -> Credentials:
 
     log.info("Starting OAuth consent flow")
     flow = InstalledAppFlow.from_client_secrets_file(str(creds_path), SCOPES)
-    creds = flow.run_local_server(port=0)
+    # Don't try to auto-launch a browser (fails on headless/SSH hosts); print the
+    # URL so it can be opened manually. The local server still catches the
+    # redirect, so this works as long as the browser can reach this host's
+    # localhost (same machine, or via `ssh -L <port>:localhost:<port>`).
+    creds = flow.run_local_server(port=0, open_browser=False)
     token_path.write_text(creds.to_json())
     log.info("Saved token to %s", token_path)
     return creds
